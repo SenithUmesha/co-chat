@@ -1,31 +1,98 @@
 ![](assets/intro_banner.png)
 
-# CoChat
+# 💬 CoChat
 
-**CoChat** is a chat application built to demonstrate the use of Kotlin and Cloud Firestore, especially for messaging between small groups of friends.
+**CoChat** is an Android chat application designed for real-time messaging between small groups of friends.
+The project focuses on implementing secure authentication, real-time communication, and UI customization using modern Android development practices.
 
-## Download
-You can Install the latest version of CoChat android app from below 👇
+This application demonstrates practical usage of **Kotlin**, **Cloud Firestore**, and real-time data synchronization in a production-style chat system.
 
-[![Download](https://img.shields.io/github/v/release/blackeyedghoul/co-chat?color=407BFF&label=Download&logo=android&style=for-the-badge)](https://github.com/BlackEyedGhouL/co-chat/releases/download/v0.1.0/CoChat_v0.1.0.apk)
+---
 
-## Preview
+## 🚀 Features
 
-![](assets/screenshots.png)
+* **Real-Time Messaging**
 
-## Tech stack & Open source libraries
+  * One-to-one and small group chat support
+  * Instant message sync using Cloud Firestore
 
-- Minimum SDK level 24.
-- 100% [Kotlin](https://kotlinlang.org/) based.
-- [OptionRoundCardView](https://github.com/captain-miao/OptionRoundCardview) - Android CardView that allows you custom round corner position.
-- [ViewPager2](https://developer.android.com/jetpack/androidx/releases/viewpager2) - Display Views or Fragments in a swipeable format.
-- [PinView](https://github.com/ChaosLeung/PinView) - Provides a widget for enter PIN/OTP/password etc on Android.
-- [Lottie](https://github.com/airbnb/lottie-android) - Lottie is a mobile library for Android and iOS that parses Adobe After Effects animations exported as json with Bodymovin and renders them natively on mobile.
-- [Coroutines](https://kotlinlang.org/docs/coroutines-overview.html) - Open the doors to asynchronous programming, coroutines also provide a wealth of other possibilities, such as concurrency and actors.
-- [Retrofit2](https://github.com/square/retrofit) - Construct the REST APIs and paging network data.
+* **Phone Number Authentication**
 
-## Author
+  * Secure login using OTP-based phone authentication
 
-You can reach the author from here.
+* **Custom Chat Backgrounds**
 
-[<img src="https://img.shields.io/badge/linkedin-%230077B5.svg?&style=for-the-badge&logo=linkedin&logoColor=0077B5&labelColor=282828" />](https://www.linkedin.com/in/senith-umesha/)
+  * Personalize chat experience with multiple background options
+
+* **Invite Friends**
+
+  * Invite users to join conversations easily
+
+* **Modern UI & Animations**
+
+  * Smooth transitions and interactive UI elements
+
+---
+
+## 📥 Download
+
+Install the latest Android release from GitHub:
+
+[![Download](https://img.shields.io/github/v/release/blackeyedghoul/co-chat?color=407BFF\&label=Download\&logo=android\&style=for-the-badge)](https://github.com/BlackEyedGhouL/co-chat/releases/download/v0.1.0/CoChat_v0.1.0.apk)
+
+---
+
+## 🖼️ Preview
+
+![Screenshots](assets/screenshots.png)
+
+---
+
+## 🛠️ Tech Stack & Libraries
+
+* **Platform:** Android
+* **Language:** Kotlin (100%)
+* **Minimum SDK:** 24
+
+### Core Technologies
+
+* **Firebase Cloud Firestore** – Real-time database for chat messages
+* **Firebase Authentication** – Phone number (OTP) authentication
+
+### Libraries & Tools
+
+* **OptionRoundCardView** – Customizable rounded CardView
+* **ViewPager2** – Swipe-based UI navigation
+* **PinView** – OTP / PIN input handling
+* **Lottie** – High-quality animations
+* **Kotlin Coroutines** – Asynchronous and concurrent programming
+* **Retrofit2** – REST API integration
+
+---
+
+## 🧠 Project Highlights
+
+* Real-time data synchronization with Firestore listeners
+* Secure phone authentication flow
+* Scalable chat architecture for small group messaging
+* Clean Kotlin-based codebase following modern Android practices
+
+---
+
+## 📂 Project Purpose
+
+This project was built to:
+
+* Practice real-time chat application architecture
+* Implement Firebase authentication and Firestore effectively
+* Strengthen Kotlin and Android UI development skills
+* Explore scalable messaging patterns for mobile apps
+
+---
+
+## 👤 Author
+
+**Senith Umesha**
+Mobile Developer
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge\&logo=linkedin\&logoColor=white)](https://www.linkedin.com/in/senith-umesha/)
