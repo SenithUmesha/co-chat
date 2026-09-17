@@ -10,6 +10,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.blackeyedghoul.cochat.Home
 import com.blackeyedghoul.cochat.R
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlin.random.Random
@@ -23,6 +25,18 @@ import kotlin.random.Random
 class FirebaseService : FirebaseMessagingService() {
 
     private val channelId = "cochat_messages"
+
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+
+        // Keep the historical user model usable for a trusted notification backend without
+        // storing any sender credential in the APK.
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(uid)
+            .update("fcmToken", token)
+    }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
