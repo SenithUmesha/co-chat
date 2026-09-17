@@ -11,7 +11,10 @@ import androidx.recyclerview.widget.RecyclerView
 import com.blackeyedghoul.cochat.R
 import com.blackeyedghoul.cochat.models.Contact
 
-class InviteContactsAdapter(private val inviteUsersList: ArrayList<Contact>, private val context: Context): RecyclerView.Adapter<InviteContactsAdapter.ViewHolder>() {
+class InviteContactsAdapter(
+    private val inviteUsersList: ArrayList<Contact>,
+    private val context: Context
+) : RecyclerView.Adapter<InviteContactsAdapter.ViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -20,24 +23,25 @@ class InviteContactsAdapter(private val inviteUsersList: ArrayList<Contact>, pri
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val user: Contact = inviteUsersList[position]
+        val user = inviteUsersList[position]
         holder.fullName.text = user.name
 
-        holder.invite.setOnClickListener{
-            val intent = Intent()
-            intent.action = Intent.ACTION_SEND
-            intent.putExtra(Intent.EXTRA_TEXT, "Hey ${user.name} \uD83D\uDC4B\uD83C\uDFFC wanna try out CoChat? It's a simple, fast app we can use to chat. Get it at https://github.com/BlackEyedGhouL/co-chat")
-            intent.type = "text/plain"
+        holder.invite.setOnClickListener {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    "Hey ${user.name} 👋🏼 wanna try out CoChat? It's a simple chat app I built as a Kotlin side project. https://github.com/SenithUmesha/co-chat"
+                )
+                type = "text/plain"
+            }
 
             context.startActivity(Intent.createChooser(intent, "Share"))
         }
     }
 
-    override fun getItemCount(): Int {
-        return inviteUsersList.size
-    }
+    override fun getItemCount(): Int = inviteUsersList.size
 
-    class ViewHolder(ItemView: View) : RecyclerView.ViewHolder(ItemView) {
+    class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val fullName: TextView = itemView.findViewById(R.id.c_invite_user_card_full_name)
         val invite: Button = itemView.findViewById(R.id.c_invite_user_card_button)
     }
