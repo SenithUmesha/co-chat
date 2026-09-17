@@ -1,28 +1,25 @@
+# Android Studio / IntelliJ
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.idea/
+.gradle/
 local.properties
-/app/src/main/java/com/blackeyedghoul/cochat/utilities/Constants.kt
-/app/release
-/build.gradle
-/app/build.gradle
-/app/google-services.json
-/app/src/main/AndroidManifest.xml
-/app/proguard-rules.pro
-/app/src/main/ic_launcher-playstore.png
-gradle.properties
-gradlew
-gradlew.bat
-build.gradle
-settings.gradle
+
+# OS files
+.DS_Store
+
+# Build output
+build/
+**/build/
+app/release/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Firebase project configuration
+# Generate your own file from the Firebase console when running the app locally.
+app/google-services.json
+
+# Signing material
+*.jks
+*.keystore
+keystore.properties
