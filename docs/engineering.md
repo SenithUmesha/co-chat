@@ -2,7 +2,7 @@
 
 CoChat is a 2022 Kotlin/Android direct-message prototype built around Firebase Phone Auth, Cloud Firestore, the Android contacts provider and an early Firebase Cloud Messaging experiment.
 
-This document explains the project as it actually exists rather than retrofitting a modern architecture onto it. Some small correctness/security issues have been cleaned up in the current public snapshot, but the overall design is intentionally still recognizably the original app.
+This document explains the project as it actually exists rather than retrofitting a modern architecture onto it. Some correctness/security issues have been cleaned up in the current public snapshot, but the overall design is intentionally still recognizably the original app.
 
 ## 1. High-level shape
 
@@ -80,7 +80,7 @@ fcmToken
 
 A matching `settings/{uid}` document is also created with a chat-background choice and the historical push-notification preference.
 
-The stored `fcmToken` field is a remnant of the original notification experiment. The current public source no longer sends FCM requests directly from the Android client.
+The stored `fcmToken` field is now only useful to a **trusted notification backend**. The Android client no longer sends FCM requests with a server credential, and `FirebaseService.onNewToken()` keeps the stored device token current when Firebase rotates it.
 
 ## 3. Conversation model
 
@@ -181,7 +181,7 @@ onPause  -> users/{uid}.isOnline = false
 
 That is intentionally still visible in the project because it shows the early presence model, but it does not mean “the user is actually online.” Navigating between Activities can produce transient offline writes, a crashed app may never send the desired final state, and there is no last-seen timestamp or server heartbeat.
 
-The current cleanup only makes the implementation null-safe: it no longer dereferences `FirebaseAuth.currentUser!!` during Activity construction.
+The current cleanup makes the implementation null-safe: it no longer dereferences `FirebaseAuth.currentUser!!` during Activity construction.
 
 A better presence design would live at the application/session level, combine lifecycle state with a server timestamp/heartbeat, and expose a `lastSeen` value instead of pretending presence is perfectly binary.
 
@@ -195,7 +195,7 @@ The app requests `READ_CONTACTS`, reads phone numbers from the Android contacts 
 
 The authentication flow is `+94` specific and the original normalizer simply removed the first three characters and prepended `0`.
 
-The current snapshot still treats CoChat as a Sri Lanka-focused prototype, but normalizes the two formats it actually expects more defensively:
+The current snapshot still treats CoChat as a Sri Lanka-focused prototype, but normalizes the formats it actually expects more defensively:
 
 ```text
 +94xxxxxxxxx -> 0xxxxxxxxx
@@ -209,23 +209,23 @@ This is not international phone-number handling. A production app should normali
 
 The original invite screen called a function for every local contact, and each call attached its own Firestore `users` snapshot listener. With a large address book, that creates an unnecessary number of listeners.
 
-The current invite flow does one contacts read and one Firestore users read, builds normalized number sets, and filters locally.
-
-The same principle applies to the registered-contact screen: read/index the phone book once, then match users against that index rather than rescanning the contacts provider for each person.
+The current invite flow does one contacts read and one Firestore users read, builds normalized number sets, and filters locally. Individual contact lookups also use `PhoneLookup` instead of repeatedly walking the entire contacts cursor.
 
 ## 8. Home / recent conversations
 
-`Home.kt` listens for users and rooms, builds `Conversation` objects, then feeds a RecyclerView. It also keeps a backup list to support local search by the receiver's display name.
+`Home.kt` combines user documents with the current user's room documents to build `Conversation` rows for a RecyclerView. It keeps a backup list for local inbox search by contact/display name.
 
-The historical implementation listens broadly to `rooms` and filters by membership on the device. That is convenient for a prototype but inefficient and, depending on Firestore rules, potentially exposes more documents than a client needs to read.
-
-A better query would fetch only rooms where the current UID is a member:
+The historical implementation listened to the **entire** `rooms` collection and then filtered membership on the device. The current snapshot scopes that listener at the query level:
 
 ```kotlin
-whereArrayContains("members", currentUid)
+rooms.whereArrayContains("members", currentUid)
 ```
 
-For larger datasets I would also denormalize the information needed by the inbox row (other participant preview/avatar, unread count, last message, last timestamp) so rendering the conversation list does not require joining several realtime streams in an Activity.
+That avoids reading unrelated room documents and makes the data access match the direct-message model more closely.
+
+The cleanup also prevents a new set of Firestore listeners from being attached every time connectivity flaps during one `Home` Activity lifetime, de-duplicates inbox rows by room ID, and sorts the inbox by `lastUpdatedTimestamp` descending. `MessagesAdapter` now compares a message timestamp to the actual current date instead of accidentally comparing the timestamp to itself (which previously made every conversation look like it happened “today”).
+
+For larger datasets I would still denormalize the information needed by the inbox row — other participant preview/avatar, unread count, last message and last timestamp — so rendering the conversation list does not require joining multiple realtime streams in an Activity.
 
 ## 9. Profile and customization
 
@@ -255,7 +255,7 @@ For a modern app I would not block the entire interface merely because the devic
 
 The 2022 version experimented with Firebase Cloud Messaging in two pieces:
 
-1. `FirebaseMessagingService` receives a data payload and displays a local notification.
+1. `FirebaseMessagingService` received a data payload and displayed a local notification.
 2. The chat screen used Retrofit to call the legacy `fcm/send` HTTP endpoint directly.
 
 The second part is the problem. A client that calls the legacy FCM server endpoint needs a server credential, and anything bundled in Android source/resources is recoverable from the APK. Ignoring a `Constants.kt` file in Git does not make a secret safe if the value must still be compiled into the application.
@@ -270,7 +270,7 @@ PushNotification.kt
 client-side legacy FCM send calls
 ```
 
-The receiving service is kept as historical context, but there is intentionally no Android-side notification sender now.
+The receiving service remains, but it is now deliberately **receive-only**. It uses a proper immutable `PendingIntent` for modern Android and updates the signed-in user's `fcmToken` field when Firebase rotates the token. A trusted backend can use that token; the APK has no notification-sender credential.
 
 ### What a safe version would do
 
@@ -308,6 +308,8 @@ app/google-services.json
 signing material
 ```
 
+The tracked `.idea/` directory was also removed from the current tree.
+
 `google-services.json` is project-specific Firebase configuration; anyone running the app should create their own Firebase project rather than inheriting the historical one.
 
 The restored toolchain reflects the project period:
@@ -320,6 +322,8 @@ compileSdk 32
 targetSdk 32
 minSdk 24
 ```
+
+The restored manifest now exports only the launcher Activity and leaves internal Activities / the messaging service non-exported. It also declares the network-state permission required by the connectivity observer.
 
 This is intentionally not a dependency-upgrade project. Changing the entire Android/Firebase toolchain would turn the repo into a migration exercise and erase some of its value as a snapshot.
 
@@ -335,7 +339,7 @@ users/{uid}
 ├── uid
 ├── isOnline
 ├── rooms[]
-└── fcmToken               # historical notification field
+└── fcmToken               # recipient token; sender lives on trusted infrastructure
 
 settings/{uid}
 ├── chatBackground
@@ -387,7 +391,7 @@ The most important changes would be:
 - app-level presence + last-seen timestamps
 - E.164 phone-number normalization
 - one indexed contact-matching pass
-- scoped Firestore queries instead of broad listeners
+- scoped Firestore queries throughout
 - lifecycle-aware listener ownership
 - backend-owned notification delivery
 - Firestore Emulator tests for room/message authorization
