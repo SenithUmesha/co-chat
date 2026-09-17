@@ -2,11 +2,9 @@ package com.blackeyedghoul.cochat
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
-import android.content.ContentResolver
 import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
-import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
@@ -15,7 +13,12 @@ import android.transition.AutoTransition
 import android.transition.TransitionManager
 import android.util.Log
 import android.view.View
-import android.widget.*
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.PopupMenu
+import android.widget.SearchView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
@@ -24,13 +27,10 @@ import com.blackeyedghoul.cochat.adapters.InviteContactsAdapter
 import com.blackeyedghoul.cochat.models.Contact
 import com.blackeyedghoul.cochat.models.User
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import java.util.*
+import java.util.Locale
 
-
-@Suppress("NAME_SHADOWING")
 class Contacts : CheckAvailability() {
 
     private lateinit var menu: ImageView
@@ -45,9 +45,7 @@ class Contacts : CheckAvailability() {
     private lateinit var progressDialogActivity: WelcomeScreen
     private lateinit var search: SearchView
     private lateinit var contactList: ArrayList<Contact>
-    private lateinit var alreadyUsersList: ArrayList<Contact>
     private lateinit var noResults: TextView
-    private lateinit var inviteToChat: TextView
     private var alertDialog: AlertDialog? = null
     private lateinit var sender: User
     private lateinit var auth: FirebaseAuth
@@ -55,13 +53,14 @@ class Contacts : CheckAvailability() {
     private lateinit var inviteLayout: ConstraintLayout
     private lateinit var expandIcon: ImageView
 
+    private val db = FirebaseFirestore.getInstance()
+
     @SuppressLint("DiscouragedPrivateApi", "SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_contacts)
 
         init()
-
         sender = intent.getParcelableExtra("SENDER")!!
 
         contactsAdapter = ContactsAdapter(searchUsersArrayList, this, sender)
@@ -71,8 +70,9 @@ class Contacts : CheckAvailability() {
 
         checkNetworkConnection()
 
-        inviteCard.setOnClickListener{
+        inviteCard.setOnClickListener {
             TransitionManager.beginDelayedTransition(inviteLayout, AutoTransition())
+
             if (recyclerViewInvite.isShown) {
                 expandIcon.setImageResource(R.drawable.forward_gray)
                 recyclerViewInvite.visibility = View.GONE
@@ -82,7 +82,7 @@ class Contacts : CheckAvailability() {
 
                 if (contactList.isEmpty()) {
                     progressDialogActivity.showProgressDialog(this)
-                    getContactList()
+                    loadInviteContacts()
                 }
             }
         }
@@ -92,14 +92,13 @@ class Contacts : CheckAvailability() {
             popupMenu.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     R.id.c_menu_invite -> {
-                        val intent = Intent()
-                        intent.action = Intent.ACTION_SEND
-                        intent.putExtra(
-                            Intent.EXTRA_TEXT,
-                            "Hey \uD83D\uDC4B\uD83C\uDFFC wanna try out CoChat? It's a simple, fast app we can use to chat. Get it at https://github.com/BlackEyedGhouL/co-chat"
-                        )
-                        intent.type = "text/plain"
-
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "Hey 👋🏼 wanna try out CoChat? It's a Kotlin chat side project I built. https://github.com/SenithUmesha/co-chat"
+                            )
+                            type = "text/plain"
+                        }
                         startActivity(Intent.createChooser(intent, "Share"))
                         true
                     }
@@ -112,56 +111,46 @@ class Contacts : CheckAvailability() {
             try {
                 val fieldPopup = PopupMenu::class.java.getDeclaredField("mPopup")
                 fieldPopup.isAccessible = true
-                val mPopup = fieldPopup.get(popupMenu)
-                mPopup.javaClass
+                val popup = fieldPopup.get(popupMenu)
+                popup.javaClass
                     .getDeclaredMethod("setForceShowIcon", Boolean::class.java)
-                    .invoke(mPopup, true)
-            } catch (e: Exception) {
-                Log.d(TAG, "Ended with exception: ", e)
+                    .invoke(popup, true)
+            } catch (error: Exception) {
+                Log.d(TAG, "Could not force popup icons", error)
             } finally {
                 popupMenu.show()
             }
         }
 
-        back.setOnClickListener {
-            onBackPressed()
-        }
+        back.setOnClickListener { onBackPressed() }
 
-        search.setOnClickListener {
-            search.isIconified = false
-        }
-
+        search.setOnClickListener { search.isIconified = false }
         search.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(p0: String?): Boolean {
-                return true
-            }
+            override fun onQueryTextSubmit(query: String?): Boolean = true
 
             @SuppressLint("NotifyDataSetChanged", "SetTextI18n")
             override fun onQueryTextChange(newText: String?): Boolean {
+                val query = newText.orEmpty().trim().lowercase(Locale.getDefault())
 
-                if (newText!!.isNotEmpty()) {
-                    searchUsersArrayList.clear()
-                    val search = newText.lowercase(Locale.getDefault())
-                    backupUsersArrayList.forEach {
-                        if (it.username.lowercase(Locale.getDefault()).contains(search)) {
-                            searchUsersArrayList.add(it)
-                        }
-                    }
-
-                    recyclerViewContacts.adapter!!.notifyDataSetChanged()
-                } else {
-                    searchUsersArrayList.clear()
+                searchUsersArrayList.clear()
+                if (query.isEmpty()) {
                     searchUsersArrayList.addAll(backupUsersArrayList)
-                    recyclerViewContacts.adapter!!.notifyDataSetChanged()
+                } else {
+                    searchUsersArrayList.addAll(
+                        backupUsersArrayList.filter {
+                            it.username.lowercase(Locale.getDefault()).contains(query)
+                        }
+                    )
                 }
 
+                contactsAdapter.notifyDataSetChanged()
+
                 if (contactsAdapter.itemCount == 0) {
-
-                    if (newText.isNotEmpty())
-                        noResults.text = "No results found for '$newText'"
-                    else
-                        noResults.text = "No contacts found"
-
+                    noResults.text = if (query.isNotEmpty()) {
+                        "No results found for '$newText'"
+                    } else {
+                        "No contacts found"
+                    }
                     noResults.visibility = View.VISIBLE
                 } else {
                     noResults.visibility = View.GONE
@@ -177,12 +166,12 @@ class Contacts : CheckAvailability() {
         contactList.clear()
         searchUsersArrayList.clear()
         usersArrayList.clear()
+        backupUsersArrayList.clear()
     }
 
     private fun checkNetworkConnection() {
         val networkConnection = InternetConnection(this)
         networkConnection.observe(this) { isConnected ->
-
             val view = View.inflate(this, R.layout.no_internet_alert, null)
             val builder = AlertDialog.Builder(this, R.style.FullscreenAlertDialog)
             builder.setView(view)
@@ -190,143 +179,122 @@ class Contacts : CheckAvailability() {
             progressDialogActivity.showProgressDialog(this)
 
             if (isConnected) {
-                Log.d(TAG, "NetworkConnection: true")
                 alertDialog?.dismiss()
                 fetchUsers()
             } else {
-                Log.d(TAG, "NetworkConnection: false")
                 progressDialogActivity.dismissProgressDialog()
                 alertDialog = builder.create()
-                alertDialog!!.window?.setBackgroundDrawableResource(android.R.color.white)
-                alertDialog!!.show()
+                alertDialog?.window?.setBackgroundDrawableResource(android.R.color.white)
+                alertDialog?.show()
 
-                val dismiss = alertDialog!!.findViewById(R.id.ni_dismiss) as? Button
-                dismiss?.setOnClickListener {
-                    alertDialog?.dismiss()
-                }
+                val dismiss = alertDialog?.findViewById(R.id.ni_dismiss) as? Button
+                dismiss?.setOnClickListener { alertDialog?.dismiss() }
             }
         }
     }
 
-    private val projection = arrayOf(
-        ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
-        ContactsContract.Contacts.DISPLAY_NAME,
-        ContactsContract.CommonDataKinds.Phone.NUMBER
-    )
+    /**
+     * Build the invite list with one contacts query and one Firestore read.
+     *
+     * The first version attached a Firestore users listener for every device contact. On a large
+     * address book that created an N+1 listener pattern. This version snapshots the phone book,
+     * fetches registered users once, then filters locally.
+     */
+    @SuppressLint("Range", "NotifyDataSetChanged")
+    private fun loadInviteContacts() {
+        val deviceContacts = linkedMapOf<String, Contact>()
+        val projection = arrayOf(
+            ContactsContract.Contacts.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER
+        )
 
-    private fun getContactList() {
-        val cr = contentResolver
-        val cursor = cr.query(
+        contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
             projection,
             null,
             null,
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-        )
-        if (cursor != null) {
-            val mobileNoSet = HashSet<String>()
-            cursor.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
-                val numberIndex =
-                    cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                var name: String
-                var number: String
-                while (cursor.moveToNext()) {
-                    name = cursor.getString(nameIndex)
-                    number = cursor.getString(numberIndex)
-                    number = number.replace(" ", "")
-                    if (!mobileNoSet.contains(number)) {
-                        contactList.add(Contact(name, number))
-                        mobileNoSet.add(number)
-                        userExists(name, number)
-                    }
+        )?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+            val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
 
-                    if (cursor.position == (cursor.count - 1)) progressDialogActivity.dismissProgressDialog()
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameIndex)
+                val rawNumber = cursor.getString(numberIndex)
+                val normalized = normalizePhoneNumber(rawNumber)
+
+                if (normalized.isNotBlank()) {
+                    deviceContacts.putIfAbsent(normalized, Contact(name, rawNumber))
                 }
             }
         }
-    }
 
-    @SuppressLint("NotifyDataSetChanged")
-    private fun userExists(name: String?, number: String) {
-        val db = FirebaseFirestore.getInstance()
-        db.collection("users")
-            .addSnapshotListener { value, error ->
-                if (error != null) {
-                    Log.d(TAG, "Get failed with ", error)
-                    return@addSnapshotListener
-                }
+        db.collection("users").get()
+            .addOnSuccessListener { snapshot ->
+                val registeredNumbers = snapshot.documents
+                    .mapNotNull { it.toObject(User::class.java)?.phoneNumber }
+                    .map(::normalizePhoneNumber)
+                    .toSet()
 
-                for (doc: DocumentChange in value?.documentChanges!!) {
-                    if (doc.type == DocumentChange.Type.ADDED) {
-                        val user: User = doc.document.toObject(User::class.java)
-                        val contact = Contact(name!!, number)
+                contactList.clear()
+                contactList.addAll(
+                    deviceContacts
+                        .filterKeys { it !in registeredNumbers }
+                        .values
+                        .sortedBy { it.name.lowercase(Locale.getDefault()) }
+                )
 
-                        if (user.phoneNumber == contact.phoneNumber || convertPhoneNumber(user.phoneNumber) == contact.phoneNumber) {
-                            Log.d(TAG, "UserExists: ${contact.name}")
-                            contactList.remove(contact)
-                        }
-                    }
-                }
                 inviteContactsAdapter.notifyDataSetChanged()
+                progressDialogActivity.dismissProgressDialog()
+            }
+            .addOnFailureListener { error ->
+                progressDialogActivity.dismissProgressDialog()
+                Toast.makeText(applicationContext, error.message, Toast.LENGTH_SHORT).show()
             }
     }
 
-    @SuppressLint("NotifyDataSetChanged", "SetTextI18n", "NewApi")
+    @SuppressLint("NotifyDataSetChanged", "SetTextI18n")
     private fun fetchUsers() {
         auth = FirebaseAuth.getInstance()
-        val currentUser = auth.currentUser
+        val currentUser = auth.currentUser ?: return
 
-        val db = FirebaseFirestore.getInstance()
         db.collection("users")
             .orderBy("username", Query.Direction.ASCENDING)
-            .addSnapshotListener { value, error ->
+            .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.d(TAG, "Get failed with ", error)
+                    Log.d(TAG, "User listener failed", error)
+                    progressDialogActivity.dismissProgressDialog()
                     return@addSnapshotListener
                 }
 
-                for (doc: DocumentChange in value?.documentChanges!!) {
-                    if (doc.type == DocumentChange.Type.ADDED || doc.type == DocumentChange.Type.MODIFIED) {
-                        val user: User = doc.document.toObject(User::class.java)
-                        val tempPhoneNumber = convertPhoneNumber(user.phoneNumber)
-                        val method1: Boolean = contactExists(this, tempPhoneNumber) // 0
-                        val method2: Boolean = contactExists(this, user.phoneNumber) // +94
+                usersArrayList.clear()
 
-                        Log.d(TAG, "FetchUsers: $method1 - ${user.phoneNumber} | $method2 - $tempPhoneNumber")
+                snapshot?.documents?.forEach { document ->
+                    val user = document.toObject(User::class.java) ?: return@forEach
+                    if (user.uid == currentUser.uid) return@forEach
 
-                        if (method1 || method2) {
-                            var name: String = user.username
-                            if (method1) {
-                                name = getContactName(this, tempPhoneNumber)!!
-                            } else if (method2) {
-                                name = getContactName(this, user.phoneNumber)!!
-                            } else if (method1 && method2) {
-                                name = getContactName(this, tempPhoneNumber)!!
-                            }
-                            user.username = name
+                    val localNumber = normalizePhoneNumber(user.phoneNumber)
+                    val contactName = getContactName(this, user.phoneNumber)
+                        ?: getContactName(this, localNumber)
 
-                            usersArrayList.removeIf { it.phoneNumber == user.phoneNumber }
-                            searchUsersArrayList.removeIf { it.phoneNumber == user.phoneNumber }
-
-                            if (currentUser!!.phoneNumber != user.phoneNumber && currentUser.phoneNumber != tempPhoneNumber)
-                                usersArrayList.add(user)
-                        }
+                    if (contactName != null) {
+                        user.username = contactName
+                        usersArrayList.add(user)
                     }
                 }
 
-                val sortedList = usersArrayList.sortedBy { it.username }.toCollection(ArrayList())
-                searchUsersArrayList.addAll(sortedList)
-                backupUsersArrayList.addAll(sortedList)
-                usersArrayList.clear()
-                contactsAdapter.notifyDataSetChanged()
+                val sortedUsers = usersArrayList
+                    .distinctBy { it.uid }
+                    .sortedBy { it.username.lowercase(Locale.getDefault()) }
 
-                if (contactsAdapter.itemCount == 0) {
-                    noResults.text = "No contacts found"
-                    noResults.visibility = View.VISIBLE
-                } else {
-                    noResults.visibility = View.GONE
-                }
+                backupUsersArrayList.clear()
+                backupUsersArrayList.addAll(sortedUsers)
+                searchUsersArrayList.clear()
+                searchUsersArrayList.addAll(sortedUsers)
+
+                contactsAdapter.notifyDataSetChanged()
+                noResults.visibility = if (contactsAdapter.itemCount == 0) View.VISIBLE else View.GONE
+                if (contactsAdapter.itemCount == 0) noResults.text = "No contacts found"
 
                 progressDialogActivity.dismissProgressDialog()
             }
@@ -334,44 +302,54 @@ class Contacts : CheckAvailability() {
 
     @SuppressLint("Range")
     fun getContactName(context: Context, phoneNumber: String?): String? {
-        val cr = context.contentResolver
-        val uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
-        val cursor = cr.query(uri, arrayOf(PhoneLookup.DISPLAY_NAME), null, null, null)
-            ?: return null
-        var contactName: String? = null
-        if (cursor.moveToFirst()) {
-            contactName = cursor.getString(cursor.getColumnIndex(PhoneLookup.DISPLAY_NAME))
-        }
-        if (!cursor.isClosed) {
-            cursor.close()
-        }
-        return contactName
-    }
+        if (phoneNumber.isNullOrBlank()) return null
 
-    @SuppressLint("Range", "Recycle")
-    fun contactExists(context: Context, number: String?): Boolean {
-        return if (number != null) {
-            val cr: ContentResolver = context.contentResolver
-            val curContacts: Cursor? =
-                cr.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null)
-            if (curContacts != null) {
-                while (curContacts.moveToNext()) {
-                    val contactNumber: String =
-                        curContacts.getString(curContacts.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))
-                    if (number == contactNumber) {
-                        return true
-                    }
+        val uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
+        context.contentResolver
+            .query(uri, arrayOf(PhoneLookup.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    return cursor.getString(cursor.getColumnIndex(PhoneLookup.DISPLAY_NAME))
                 }
             }
-            false
-        } else {
-            false
+
+        return null
+    }
+
+    fun contactExists(context: Context, number: String?): Boolean {
+        if (number.isNullOrBlank()) return false
+
+        val uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+        context.contentResolver
+            .query(uri, arrayOf(PhoneLookup._ID), null, null, null)
+            ?.use { cursor ->
+                return cursor.moveToFirst()
+            }
+
+        return false
+    }
+
+    /**
+     * CoChat's phone-auth flow is Sri Lanka-focused (+94). Normalize the formats the prototype
+     * commonly sees in the phone book so +94xxxxxxxxx and 0xxxxxxxxx compare consistently.
+     */
+    fun normalizePhoneNumber(phoneNumber: String): String {
+        val cleaned = phoneNumber
+            .trim()
+            .replace(" ", "")
+            .replace("-", "")
+            .replace("(", "")
+            .replace(")", "")
+
+        return when {
+            cleaned.startsWith("+94") && cleaned.length > 3 -> "0${cleaned.substring(3)}"
+            cleaned.startsWith("94") && cleaned.length > 2 -> "0${cleaned.substring(2)}"
+            else -> cleaned
         }
     }
 
-    fun convertPhoneNumber(phoneNumber: String): String {
-        return "0".plus(phoneNumber.substring(3, phoneNumber.lastIndex + 1))
-    }
+    // Kept for Home.kt, which used the original helper name.
+    fun convertPhoneNumber(phoneNumber: String): String = normalizePhoneNumber(phoneNumber)
 
     private fun init() {
         menu = findViewById(R.id.c_more)
@@ -383,10 +361,8 @@ class Contacts : CheckAvailability() {
         usersArrayList = arrayListOf()
         searchUsersArrayList = arrayListOf()
         contactList = arrayListOf()
-        alreadyUsersList = arrayListOf()
         backupUsersArrayList = arrayListOf()
         noResults = findViewById(R.id.c_no_results_text)
-        inviteToChat = findViewById(R.id.c_invite_text)
         inviteCard = findViewById(R.id.c_invite_card)
         inviteLayout = findViewById(R.id.c_invite_layout)
         expandIcon = findViewById(R.id.c_invite_expand_icon)
